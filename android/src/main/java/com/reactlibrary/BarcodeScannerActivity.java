@@ -1,31 +1,25 @@
 package com.reactlibrary;
 
-import android.app.Activity;
 import android.Manifest;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.os.Bundle;
-import android.os.Handler;
+import android.os.*;
 import android.util.Size;
-import android.view.ViewGroup;
-import android.widget.FrameLayout;
+import android.view.*;
+import android.widget.*;
+import android.graphics.Color;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.core.CameraSelector;
-import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageProxy;
-import androidx.camera.core.Preview;
+import androidx.camera.core.*;
 import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LifecycleOwner;
 
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.mlkit.vision.barcode.BarcodeScanning;
-import com.google.mlkit.vision.barcode.BarcodeScanner;
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
+import com.google.mlkit.vision.barcode.*;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
 
@@ -37,16 +31,29 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     private static final int CAMERA_PERMISSION_REQUEST = 10;
     private PreviewView previewView;
     private boolean scanned = false;
+    private View laser;
+    private View scanFrame;
+    private Handler laserHandler = new Handler(Looper.getMainLooper());
+    private boolean laserUp = true;
+    private Vibrator vibrator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        previewView = new PreviewView(this);
-        previewView.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-        setContentView(previewView);
+        // Inflate overlay layout
+        FrameLayout root = new FrameLayout(this);
+        View overlay = getLayoutInflater().inflate(getResources().getIdentifier("overlay_scanner", "layout", getPackageName()), null);
+
+        previewView = overlay.findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
+        scanFrame = overlay.findViewById(getResources().getIdentifier("scan_frame", "id", getPackageName()));
+        laser = overlay.findViewById(getResources().getIdentifier("laser", "id", getPackageName()));
+        root.addView(overlay);
+        setContentView(root);
+
+        vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+
+        startLaserAnimation();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -55,6 +62,39 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(
                     this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
         }
+    }
+
+    private void startLaserAnimation() {
+        laserHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (scanned) return; // stop animating if scanned
+                int frameHeight = scanFrame.getHeight();
+                int startY = scanFrame.getTop();
+                int endY = scanFrame.getBottom() - laser.getHeight();
+                int step = 7; // px per frame
+
+                int currY = (int) laser.getY();
+                if (laserUp) {
+                    currY += step;
+                    if (currY >= endY) {
+                        laserUp = false;
+                    }
+                } else {
+                    currY -= step;
+                    if (currY <= startY) {
+                        laserUp = true;
+                    }
+                }
+                laser.setY(currY);
+                laserHandler.postDelayed(this, 15);
+            }
+        });
+    }
+
+    private void setLaserColor(int color) {
+        laser.setBackgroundColor(color);
+        scanFrame.setBackgroundColor(Color.argb(60, Color.red(color), Color.green(color), Color.blue(color)));
     }
 
     private void startCamera() {
@@ -73,7 +113,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
 
     private void bindPreviewAndAnalyzer(@NonNull ProcessCameraProvider cameraProvider) {
         Preview preview = new Preview.Builder()
-                .setTargetResolution(new Size(1280, 720))
+                .setTargetResolution(new Size(1920, 1080))
                 .build();
 
         CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
@@ -84,7 +124,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         BarcodeScanner scanner = BarcodeScanning.getClient(options);
 
         ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                .setTargetResolution(new Size(1280, 720))
+                .setTargetResolution(new Size(1920, 1080))
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build();
 
@@ -117,12 +157,23 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                         Barcode barcode = barcodes.get(0);
                         scanned = true;
 
+                        setLaserColor(Color.RED);
+
+                        // Vibración corta
+                        if (vibrator != null && vibrator.hasVibrator()) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE));
+                            } else {
+                                vibrator.vibrate(100);
+                            }
+                        }
+
                         Intent resultIntent = new Intent();
                         resultIntent.putExtra("barcode", barcode.getRawValue());
                         setResult(Activity.RESULT_OK, resultIntent);
 
-                        // Dale 300ms antes de cerrar para evitar crash/preview issues
-                        new Handler(getMainLooper()).postDelayed(this::finish, 300);
+                        // Dale 400ms para mostrar láser rojo + vibrar
+                        new Handler(getMainLooper()).postDelayed(this::finish, 400);
                     }
                 })
                 .addOnFailureListener(Throwable::printStackTrace)

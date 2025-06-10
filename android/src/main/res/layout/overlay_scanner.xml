@@ -1,15 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Preview de la cámara -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Zona de escaneo -->
     <FrameLayout
         android:id="@+id/scan_frame"
         android:layout_width="280dp"
@@ -17,7 +14,6 @@
         android:layout_gravity="center"
         android:background="@drawable/scan_frame_bg">
 
-        <!-- Línea láser animada -->
         <View
             android:id="@+id/laser"
             android:layout_width="match_parent"
@@ -26,7 +22,6 @@
             android:background="#77FF00" />
     </FrameLayout>
 
-    <!-- Botón de flash -->
     <Button
         android:id="@+id/flash_button"
         android:layout_width="wrap_content"

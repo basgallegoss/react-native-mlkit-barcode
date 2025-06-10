@@ -2,7 +2,7 @@
   package="com.reactlibrary">
 
   <uses-permission android:name="android.permission.CAMERA" />
-
+  <uses-permission android:name="android.permission.VIBRATE" />
   <application>
     <activity android:name=".BarcodeScannerActivity" />
   </application>

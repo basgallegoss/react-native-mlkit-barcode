@@ -37,6 +37,8 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     private Handler laserHandler = new Handler(Looper.getMainLooper());
     private boolean laserUp = true;
     private Vibrator vibrator;
+    private CameraControl cameraControl;
+    private boolean flashEnabled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,10 +51,32 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         previewView = overlay.findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
         scanFrame = overlay.findViewById(getResources().getIdentifier("scan_frame", "id", getPackageName()));
         laser = overlay.findViewById(getResources().getIdentifier("laser", "id", getPackageName()));
+        Button flashButton = overlay.findViewById(getResources().getIdentifier("flash_button", "id", getPackageName()));
+
         root.addView(overlay);
         setContentView(root);
 
         vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+
+        // Flash toggle
+        flashButton.setOnClickListener(v -> {
+            flashEnabled = !flashEnabled;
+            if (cameraControl != null) {
+                cameraControl.enableTorch(flashEnabled);
+                flashButton.setText(flashEnabled ? "Flash ON" : "Flash OFF");
+            }
+        });
+
+        // Touch to focus
+        previewView.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {
+                MeteringPointFactory factory = previewView.getMeteringPointFactory();
+                MeteringPoint point = factory.createPoint(event.getX(), event.getY());
+                FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
+                cameraControl.startFocusAndMetering(action);
+            }
+            return false;
+        });
 
         startLaserAnimation();
 
@@ -73,7 +97,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                 int frameHeight = scanFrame.getHeight();
                 int startY = scanFrame.getTop();
                 int endY = scanFrame.getBottom() - laser.getHeight();
-                int step = 7; // px per frame
+                int step = 10; // px per frame
 
                 int currY = (int) laser.getY();
                 if (laserUp) {
@@ -95,7 +119,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
 
     private void setLaserColor(int color) {
         laser.setBackgroundColor(color);
-        scanFrame.setBackgroundColor(Color.argb(60, Color.red(color), Color.green(color), Color.blue(color)));
+        scanFrame.setBackgroundColor(Color.argb(30, Color.red(color), Color.green(color), Color.blue(color)));
     }
 
     private void startCamera() {
@@ -138,8 +162,10 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         });
 
         cameraProvider.unbindAll();
-        cameraProvider.bindToLifecycle(
+        Camera camera = cameraProvider.bindToLifecycle(
                 (LifecycleOwner) this, cameraSelector, preview, imageAnalysis);
+
+        cameraControl = camera.getCameraControl();
 
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
     }

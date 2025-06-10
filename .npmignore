@@ -1,0 +1,9 @@
+*.log
+__tests__/
+android/build/
+ios/build/
+node_modules/
+coverage/
+example/
+.git/
+.gitignore

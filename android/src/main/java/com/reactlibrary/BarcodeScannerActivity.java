@@ -1,15 +1,16 @@
 package com.reactlibrary;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Size;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
@@ -27,11 +28,10 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 
-public class BarcodeScannerActivity extends Activity {
+public class BarcodeScannerActivity extends AppCompatActivity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 10;
     private PreviewView previewView;
@@ -103,8 +103,6 @@ public class BarcodeScannerActivity extends Activity {
     }
 
     private void processImageProxy(BarcodeScanner scanner, ImageProxy imageProxy) {
-        @androidx.camera.core.ExperimentalGetImage
-        ImageProxy.PlaneProxy[] planes = imageProxy.getPlanes();
         if (imageProxy.getImage() == null) {
             imageProxy.close();
             return;
@@ -122,7 +120,8 @@ public class BarcodeScannerActivity extends Activity {
                         resultIntent.putExtra("barcode", barcode.getRawValue());
                         setResult(Activity.RESULT_OK, resultIntent);
 
-                        finish();
+                        // Dale 300ms antes de cerrar para evitar crash/preview issues
+                        new Handler(getMainLooper()).postDelayed(this::finish, 300);
                     }
                 })
                 .addOnFailureListener(Throwable::printStackTrace)

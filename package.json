@@ -1,6 +1,6 @@
 {
   "name": "rn-mlkit-barcodes",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "React Native bridge for ML Kit Barcode Scanning (Android PDF417)",
   "main": "index.js",
   "scripts": {

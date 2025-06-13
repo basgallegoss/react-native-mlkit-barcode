@@ -4,12 +4,11 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.RectF;
 import android.os.*;
 import android.util.Size;
 import android.view.*;
 import android.widget.*;
-import android.graphics.Color;
-
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.*;
@@ -23,7 +22,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.barcode.*;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
-
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -37,17 +35,17 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     private static final int GLITCH_TOLERANCE = 2;
 
     private PreviewView previewView;
-    private boolean scanned = false;
+    private OverlayView overlayView;
+    private FrameLayout scanFrame;
     private View laser;
-    private View scanFrame;
     private Handler laserHandler = new Handler(Looper.getMainLooper());
-    private boolean laserUp = true;
+    private boolean laserDown = true;
+    private boolean scanned = false;
     private Vibrator vibrator;
     private CameraControl cameraControl;
     private boolean flashEnabled = false;
     private ProgressBar progressBar;
     private TextView feedbackText;
-
     private Map<String, List<String>> barcodeHistories = new HashMap<>();
     private long lastReadingTimestamp = 0;
 
@@ -55,43 +53,33 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        FrameLayout root = new FrameLayout(this);
-        View overlay = getLayoutInflater().inflate(getResources().getIdentifier("overlay_scanner", "layout", getPackageName()), null);
+        setContentView(getLayoutInflater().inflate(
+            getResources().getIdentifier("overlay_scanner", "layout", getPackageName()), null));
 
-        previewView = overlay.findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
-        scanFrame = overlay.findViewById(getResources().getIdentifier("scan_frame", "id", getPackageName()));
-        laser = overlay.findViewById(getResources().getIdentifier("laser", "id", getPackageName()));
-        Button flashButton = overlay.findViewById(getResources().getIdentifier("flash_button", "id", getPackageName()));
-
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, 18);
-        params.setMargins(60, 80, 60, 0);
-        progressBar.setLayoutParams(params);
-        progressBar.setMax(100);
-
-        feedbackText = new TextView(this);
-        FrameLayout.LayoutParams textParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        textParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        textParams.topMargin = 120;
-        feedbackText.setLayoutParams(textParams);
-        feedbackText.setTextColor(Color.WHITE);
-        feedbackText.setTextSize(16);
-
-        ((FrameLayout) overlay).addView(progressBar);
-        ((FrameLayout) overlay).addView(feedbackText);
-        root.addView(overlay);
-        setContentView(root);
+        previewView = findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
+        overlayView = findViewById(getResources().getIdentifier("overlayView", "id", getPackageName()));
+        scanFrame = findViewById(getResources().getIdentifier("scan_frame", "id", getPackageName()));
+        laser = findViewById(getResources().getIdentifier("laser", "id", getPackageName()));
+        progressBar = findViewById(getResources().getIdentifier("progressBar", "id", getPackageName()));
+        feedbackText = findViewById(getResources().getIdentifier("feedbackText", "id", getPackageName()));
 
         vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
 
+        // Botón Flash
+        ImageButton flashButton = findViewById(getResources().getIdentifier("flash_button", "id", getPackageName()));
         flashButton.setOnClickListener(v -> {
             flashEnabled = !flashEnabled;
             if (cameraControl != null) {
                 cameraControl.enableTorch(flashEnabled);
-                flashButton.setText(flashEnabled ? "Flash ON" : "Flash OFF");
+                flashButton.setImageResource(flashEnabled ? R.drawable.ic_flash_off : R.drawable.ic_flash_on);
             }
         });
 
+        // Botón cerrar
+        ImageButton closeButton = findViewById(getResources().getIdentifier("close_button", "id", getPackageName()));
+        closeButton.setOnClickListener(v -> finish());
+
+        // Enfoque por toque
         previewView.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {
                 MeteringPointFactory factory = previewView.getMeteringPointFactory();
@@ -101,6 +89,9 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             }
             return false;
         });
+
+        // Configura overlay y marco adaptativo
+        scanFrame.post(this::setAdaptiveFrame);
 
         startLaserAnimation();
 
@@ -113,36 +104,68 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         }
     }
 
+    // Calcula marco adaptativo a cualquier pantalla/orientación
+    private void setAdaptiveFrame() {
+        int screenWidth = Resources.getSystem().getDisplayMetrics().widthPixels;
+        int screenHeight = Resources.getSystem().getDisplayMetrics().heightPixels;
+
+        // Ajusta según orientación y tamaño de pantalla
+        float frameWidth = screenWidth * (screenWidth > screenHeight ? 0.5f : 0.8f);
+        float aspectRatio = 1.62f; // PDF417 típico
+        float frameHeight = frameWidth / aspectRatio;
+        if (frameHeight > screenHeight * 0.65f) {
+            frameHeight = screenHeight * 0.65f;
+            frameWidth = frameHeight * aspectRatio;
+        }
+
+        float left = (screenWidth - frameWidth) / 2f;
+        float top = (screenHeight - frameHeight) / 2f;
+        float right = left + frameWidth;
+        float bottom = top + frameHeight;
+        RectF frameRect = new RectF(left, top, right, bottom);
+
+        // Actualiza tamaño y posición del scan_frame
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) scanFrame.getLayoutParams();
+        params.width = (int) frameWidth;
+        params.height = (int) frameHeight;
+        params.leftMargin = (int) left;
+        params.topMargin = (int) top;
+        scanFrame.setLayoutParams(params);
+
+        // Radio: 8% del ancho marco para esquinas redondeadas
+        overlayView.setFrame(frameRect, frameWidth * 0.08f);
+    }
+
     private void startLaserAnimation() {
         laserHandler.post(new Runnable() {
             @Override
             public void run() {
                 if (scanned) return;
                 int frameHeight = scanFrame.getHeight();
-                int startY = scanFrame.getTop();
-                int endY = scanFrame.getBottom() - laser.getHeight();
-                int step = 10;
-                int currY = (int) laser.getY();
-                if (laserUp) {
+                int laserHeight = laser.getHeight();
+                int minY = 0;
+                int maxY = frameHeight - laserHeight;
+                float currY = laser.getY();
+                float step = 6f;
+                if (laserDown) {
                     currY += step;
-                    if (currY >= endY) {
-                        laserUp = false;
-                    }
+                    if (currY >= maxY) laserDown = false;
                 } else {
                     currY -= step;
-                    if (currY <= startY) {
-                        laserUp = true;
-                    }
+                    if (currY <= minY) laserDown = true;
                 }
                 laser.setY(currY);
-                laserHandler.postDelayed(this, 15);
+                laserHandler.postDelayed(this, 10);
             }
         });
     }
 
     private void setLaserColor(int color) {
         laser.setBackgroundColor(color);
-        scanFrame.setBackgroundColor(Color.argb(30, Color.red(color), Color.green(color), Color.blue(color)));
+        scanFrame.setBackgroundColor(android.graphics.Color.argb(18,
+                android.graphics.Color.red(color),
+                android.graphics.Color.green(color),
+                android.graphics.Color.blue(color)));
     }
 
     private void startCamera() {
@@ -189,10 +212,22 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                 (LifecycleOwner) this, cameraSelector, preview, imageAnalysis);
 
         cameraControl = camera.getCameraControl();
+        // Enfoca al centro al iniciar
+        previewView.postDelayed(() -> {
+            MeteringPointFactory factory = previewView.getMeteringPointFactory();
+            MeteringPoint point = factory.createPoint(previewView.getWidth()/2f, previewView.getHeight()/2f);
+            FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
+            cameraControl.startFocusAndMetering(action);
+        }, 500);
+
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
     }
 
     private void processImageProxy(BarcodeScanner scanner, ImageProxy imageProxy) {
+        if (scanned) {
+            imageProxy.close();
+            return;
+        }
         if (imageProxy.getImage() == null) {
             imageProxy.close();
             return;
@@ -202,75 +237,60 @@ public class BarcodeScannerActivity extends AppCompatActivity {
 
         scanner.process(image)
                 .addOnSuccessListener(barcodes -> {
-                    if (barcodes != null && !barcodes.isEmpty()) {
-                        long now = System.currentTimeMillis();
-                        for (Barcode barcode : barcodes) {
-                            String raw = barcode.getRawValue();
-                            if (raw != null && raw.length() >= 10) {
-                                String key = findSimilarKey(raw);
-                                if (!barcodeHistories.containsKey(key))
-                                    barcodeHistories.put(key, new ArrayList<>());
-                                List<String> history = barcodeHistories.get(key);
-                                if (history.size() >= MAX_READINGS) history.remove(0);
-                                history.add(raw);
-                            }
+                    if (scanned) return;
+                    long now = System.currentTimeMillis();
+                    for (Barcode barcode : barcodes) {
+                        String raw = barcode.getRawValue();
+                        if (raw != null && raw.length() >= 10) {
+                            String key = findSimilarKey(raw);
+                            if (!barcodeHistories.containsKey(key))
+                                barcodeHistories.put(key, new ArrayList<>());
+                            List<String> history = barcodeHistories.get(key);
+                            if (history.size() >= MAX_READINGS) history.remove(0);
+                            history.add(raw);
                         }
-
-                        // Selecciona el candidato más largo entre todos los keys válidos
-                        String bestCandidate = "";
-                        int bestProgress = 0;
-                        for (List<String> history : barcodeHistories.values()) {
-                            String reconstructed = majorityVote(history);
-                            int progress = progressPercent(reconstructed);
-                            if (progress > bestProgress) {
-                                bestCandidate = reconstructed;
-                                bestProgress = progress;
-                            }
+                    }
+                    String bestCandidate = "";
+                    int bestProgress = 0;
+                    for (List<String> history : barcodeHistories.values()) {
+                        String reconstructed = majorityVote(history);
+                        int progress = progressPercent(reconstructed);
+                        if (progress > bestProgress) {
+                            bestCandidate = reconstructed;
+                            bestProgress = progress;
                         }
+                    }
+                    progressBar.setProgress(bestProgress);
+                    if (bestProgress < 60) {
+                        setLaserColor(0xFFFFCC00); // Amarillo
+                        feedbackText.setText("Leyendo… " + bestProgress + "%");
+                    } else if (bestProgress < 100) {
+                        setLaserColor(0xFF00FF00); // Verde
+                        feedbackText.setText("¡Casi listo! " + bestProgress + "%");
+                    } else {
+                        setLaserColor(0xFF2D55FF); // Azul
+                        feedbackText.setText("¡Código leído!");
+                    }
+                    if (isLikelyValidPdf417(bestCandidate)) {
+                        scanned = true;
+                        setLaserColor(0xFF2D55FF); // Azul
+                        feedbackText.setText("¡Lectura completa!");
+                        vibrateSuccess();
 
-                        // Actualiza feedback visual
-                        progressBar.setProgress(bestProgress);
-                        if (bestProgress < 60) {
-                            setLaserColor(Color.YELLOW);
-                            feedbackText.setText("Leyendo código… " + bestProgress + "%");
-                        } else if (bestProgress < 100) {
-                            setLaserColor(Color.GREEN);
-                            feedbackText.setText("¡Casi listo! " + bestProgress + "%");
+                        Intent resultIntent = new Intent();
+                        resultIntent.putExtra("barcode", bestCandidate);
+                        setResult(Activity.RESULT_OK, resultIntent);
+                        new Handler(getMainLooper()).postDelayed(this::finish, 400);
+                    } else {
+                        if (now - lastReadingTimestamp > 3500) {
+                            barcodeHistories.clear();
+                            progressBar.setProgress(0);
+                            feedbackText.setText("No se pudo leer, intenta enfocar mejor");
+                            setLaserColor(0xFFFF4444); // Rojo
+                            vibrateError();
+                            lastReadingTimestamp = now;
                         } else {
-                            setLaserColor(Color.BLUE);
-                            feedbackText.setText("¡Código leído!");
-                        }
-
-                        // Si es válido, finalizar
-                        if (isLikelyValidPdf417(bestCandidate)) {
-                            scanned = true;
-                            setLaserColor(Color.CYAN);
-                            feedbackText.setText("¡Lectura completada!");
-
-                            if (vibrator != null && vibrator.hasVibrator()) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    vibrator.vibrate(VibrationEffect.createOneShot(500, 255));
-                                } else {
-                                   vibrator.vibrate(500);
-                                }
-                            }
-
-                            Intent resultIntent = new Intent();
-                            resultIntent.putExtra("barcode", bestCandidate);
-                            setResult(Activity.RESULT_OK, resultIntent);
-
-                            new Handler(getMainLooper()).postDelayed(this::finish, 400);
-                        } else {
-                            // Si pasan más de 4 segundos sin avance, resetea histories
-                            if (now - lastReadingTimestamp > 4000) {
-                                barcodeHistories.clear();
-                                progressBar.setProgress(0);
-                                feedbackText.setText("No se pudo leer, intenta enfocar mejor");
-                                setLaserColor(Color.RED);
-                                lastReadingTimestamp = now;
-                            } else {
-                                lastReadingTimestamp = now;
-                            }
+                            lastReadingTimestamp = now;
                         }
                     }
                 })
@@ -278,7 +298,29 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                 .addOnCompleteListener(task -> imageProxy.close());
     }
 
-    // Busca si ya existe una key "parecida"
+    // Vibración fuerte: éxito
+    private void vibrateSuccess() {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(500);
+            }
+        }
+    }
+
+    // Vibración patrón: error
+    private void vibrateError() {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                long[] pattern = {0, 150, 100, 150, 100, 200};
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            } else {
+                vibrator.vibrate(new long[]{0, 150, 100, 150, 100, 200}, -1);
+            }
+        }
+    }
+
     private String findSimilarKey(String candidate) {
         for (String key : barcodeHistories.keySet()) {
             if (distance(candidate, key) <= GLITCH_TOLERANCE) return key;
@@ -286,7 +328,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         return candidate;
     }
 
-    // Reconstrucción por “majority vote” por posición
     private String majorityVote(List<String> fragments) {
         if (fragments == null || fragments.isEmpty()) return "";
         int maxLen = 0;
@@ -313,7 +354,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         return result.toString().trim();
     }
 
-    // Distancia de Levenshtein simplificada (hasta GLITCH_TOLERANCE)
     private int distance(String a, String b) {
         int la = a.length(), lb = b.length();
         int[][] dp = new int[la + 1][lb + 1];

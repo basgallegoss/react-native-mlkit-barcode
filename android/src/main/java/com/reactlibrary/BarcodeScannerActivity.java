@@ -40,7 +40,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     private FrameLayout scanFrame;
     private View laser;
     private Handler laserHandler = new Handler(Looper.getMainLooper());
-    private boolean laserDown = true;
     private boolean scanned = false;
     private Vibrator vibrator;
     private CameraControl cameraControl;
@@ -54,8 +53,13 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        setContentView(getLayoutInflater().inflate(
-            getResources().getIdentifier("overlay_scanner", "layout", getPackageName()), null));
+        int layoutId = getResources().getIdentifier("overlay_scanner", "layout", getPackageName());
+        if (layoutId == 0) {
+            Toast.makeText(this, "Layout overlay_scanner not found", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        setContentView(getLayoutInflater().inflate(layoutId, null));
 
         previewView = findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
         overlayView = findViewById(getResources().getIdentifier("overlayView", "id", getPackageName()));
@@ -64,19 +68,29 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         progressBar = findViewById(getResources().getIdentifier("progressBar", "id", getPackageName()));
         feedbackText = findViewById(getResources().getIdentifier("feedbackText", "id", getPackageName()));
 
+        if (previewView == null || overlayView == null || scanFrame == null) {
+            Toast.makeText(this, "Critical view missing in overlay_scanner.xml", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
         vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
 
         ImageButton flashButton = findViewById(getResources().getIdentifier("flash_button", "id", getPackageName()));
-        flashButton.setOnClickListener(v -> {
-            flashEnabled = !flashEnabled;
-            if (cameraControl != null) {
-                cameraControl.enableTorch(flashEnabled);
-                flashButton.setImageResource(flashEnabled ? R.drawable.ic_flash_off : R.drawable.ic_flash_on);
-            }
-        });
+        if (flashButton != null) {
+            flashButton.setOnClickListener(v -> {
+                flashEnabled = !flashEnabled;
+                if (cameraControl != null) {
+                    cameraControl.enableTorch(flashEnabled);
+                    flashButton.setImageResource(flashEnabled ? R.drawable.ic_flash_off : R.drawable.ic_flash_on);
+                }
+            });
+        }
 
         ImageButton closeButton = findViewById(getResources().getIdentifier("close_button", "id", getPackageName()));
-        closeButton.setOnClickListener(v -> finish());
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> finish());
+        }
 
         previewView.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {

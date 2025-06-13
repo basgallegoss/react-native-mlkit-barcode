@@ -8,12 +8,12 @@ import android.view.View;
 public class OverlayView extends View {
     private RectF frameRect;
     private float cornerRadius = 36f;
+    private float laserY = 0f;
+
     private Paint backgroundPaint;
     private Paint clearPaint;
     private Paint framePaint;
     private Paint laserPaint;
-    private float laserY = 0;
-    private boolean laserDown = true;
 
     public OverlayView(Context context) { super(context); init(); }
     public OverlayView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -39,17 +39,16 @@ public class OverlayView extends View {
     public void setFrame(RectF rect, float radius) {
         this.frameRect = rect;
         this.cornerRadius = radius;
-        if (rect != null) this.laserY = rect.top;
-        invalidate();
-    }
-
-    public void setLaserPos(float y) {
-        this.laserY = y;
         invalidate();
     }
 
     public RectF getFrameRect() {
         return frameRect;
+    }
+
+    public void setLaserPos(float y) {
+        this.laserY = y;
+        invalidate();
     }
 
     @Override

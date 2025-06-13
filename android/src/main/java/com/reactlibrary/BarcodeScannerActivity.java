@@ -66,7 +66,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
 
         vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
 
-        // Botón Flash
         ImageButton flashButton = findViewById(getResources().getIdentifier("flash_button", "id", getPackageName()));
         flashButton.setOnClickListener(v -> {
             flashEnabled = !flashEnabled;
@@ -76,11 +75,9 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             }
         });
 
-        // Botón cerrar
         ImageButton closeButton = findViewById(getResources().getIdentifier("close_button", "id", getPackageName()));
         closeButton.setOnClickListener(v -> finish());
 
-        // Enfoque por toque
         previewView.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {
                 MeteringPointFactory factory = previewView.getMeteringPointFactory();
@@ -91,7 +88,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             return false;
         });
 
-        // Configura overlay y marco adaptativo
         scanFrame.post(this::setAdaptiveFrame);
 
         startLaserAnimation();
@@ -105,14 +101,12 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         }
     }
 
-    // Calcula marco adaptativo a cualquier pantalla/orientación
     private void setAdaptiveFrame() {
         int screenWidth = Resources.getSystem().getDisplayMetrics().widthPixels;
         int screenHeight = Resources.getSystem().getDisplayMetrics().heightPixels;
 
-        // Ajusta según orientación y tamaño de pantalla
         float frameWidth = screenWidth * (screenWidth > screenHeight ? 0.5f : 0.8f);
-        float aspectRatio = 1.62f; // PDF417 típico
+        float aspectRatio = 1.62f;
         float frameHeight = frameWidth / aspectRatio;
         if (frameHeight > screenHeight * 0.65f) {
             frameHeight = screenHeight * 0.65f;
@@ -125,7 +119,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         float bottom = top + frameHeight;
         RectF frameRect = new RectF(left, top, right, bottom);
 
-        // Actualiza tamaño y posición del scan_frame
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) scanFrame.getLayoutParams();
         params.width = (int) frameWidth;
         params.height = (int) frameHeight;
@@ -133,7 +126,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         params.topMargin = (int) top;
         scanFrame.setLayoutParams(params);
 
-        // Radio: 8% del ancho marco para esquinas redondeadas
         overlayView.setFrame(frameRect, frameWidth * 0.08f);
     }
 
@@ -145,7 +137,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (scanned || overlayView == null) return;
-                RectF frame = overlayView.frameRect;
+                RectF frame = overlayView.getFrameRect();
                 if (frame == null) {
                     laserHandler.postDelayed(this, 12);
                     return;
@@ -165,7 +157,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             }
         });
     }
-
 
     private void setLaserColor(int color) {
         laser.setBackgroundColor(color);
@@ -219,7 +210,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                 (LifecycleOwner) this, cameraSelector, preview, imageAnalysis);
 
         cameraControl = camera.getCameraControl();
-        // Enfoca al centro al iniciar
         previewView.postDelayed(() -> {
             MeteringPointFactory factory = previewView.getMeteringPointFactory();
             MeteringPoint point = factory.createPoint(previewView.getWidth()/2f, previewView.getHeight()/2f);
@@ -269,18 +259,18 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                     }
                     progressBar.setProgress(bestProgress);
                     if (bestProgress < 60) {
-                        setLaserColor(0xFFFFCC00); // Amarillo
+                        setLaserColor(0xFFFFCC00);
                         feedbackText.setText("Leyendo… " + bestProgress + "%");
                     } else if (bestProgress < 100) {
-                        setLaserColor(0xFF00FF00); // Verde
+                        setLaserColor(0xFF00FF00);
                         feedbackText.setText("¡Casi listo! " + bestProgress + "%");
                     } else {
-                        setLaserColor(0xFF2D55FF); // Azul
+                        setLaserColor(0xFF2D55FF);
                         feedbackText.setText("¡Código leído!");
                     }
                     if (isLikelyValidPdf417(bestCandidate)) {
                         scanned = true;
-                        setLaserColor(0xFF2D55FF); // Azul
+                        setLaserColor(0xFF2D55FF);
                         feedbackText.setText("¡Lectura completa!");
                         vibrateSuccess();
 
@@ -293,7 +283,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                             barcodeHistories.clear();
                             progressBar.setProgress(0);
                             feedbackText.setText("No se pudo leer, intenta enfocar mejor");
-                            setLaserColor(0xFFFF4444); // Rojo
+                            setLaserColor(0xFFFF4444);
                             vibrateError();
                             lastReadingTimestamp = now;
                         } else {
@@ -305,7 +295,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
                 .addOnCompleteListener(task -> imageProxy.close());
     }
 
-    // Vibración fuerte: éxito
     private void vibrateSuccess() {
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -316,7 +305,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         }
     }
 
-    // Vibración patrón: error
     private void vibrateError() {
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

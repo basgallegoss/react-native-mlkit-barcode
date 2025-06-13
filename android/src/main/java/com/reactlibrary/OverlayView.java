@@ -5,7 +5,6 @@ import android.graphics.*;
 import android.util.AttributeSet;
 import android.view.View;
 
-// En OverlayView.java (solo Overlay y láser visual, no animación)
 public class OverlayView extends View {
     private RectF frameRect;
     private float cornerRadius = 36f;
@@ -13,15 +12,15 @@ public class OverlayView extends View {
     private Paint clearPaint;
     private Paint framePaint;
     private Paint laserPaint;
-    private float laserPos = 0f; // Posición Y relativa dentro del frame
-    private LinearGradient laserGradient;
+    private float laserY = 0;
+    private boolean laserDown = true;
 
     public OverlayView(Context context) { super(context); init(); }
     public OverlayView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
 
     private void init() {
         backgroundPaint = new Paint();
-        backgroundPaint.setColor(0xCC000000); // Fondo negro translúcido
+        backgroundPaint.setColor(0xCC000000);
         clearPaint = new Paint();
         clearPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
         clearPaint.setAntiAlias(true);
@@ -31,6 +30,7 @@ public class OverlayView extends View {
         framePaint.setStyle(Paint.Style.STROKE);
         framePaint.setAntiAlias(true);
         laserPaint = new Paint();
+        laserPaint.setShader(new LinearGradient(0, 0, getWidth(), 0, 0xFF2D55FF, 0xFF7D30D7, Shader.TileMode.CLAMP));
         laserPaint.setStrokeWidth(8f);
         laserPaint.setAntiAlias(true);
         laserPaint.setAlpha(180);
@@ -39,25 +39,17 @@ public class OverlayView extends View {
     public void setFrame(RectF rect, float radius) {
         this.frameRect = rect;
         this.cornerRadius = radius;
-        updateLaserGradient();
-        if (rect != null) this.laserPos = rect.top + 12;
+        if (rect != null) this.laserY = rect.top;
         invalidate();
     }
 
     public void setLaserPos(float y) {
-        this.laserPos = y;
+        this.laserY = y;
         invalidate();
     }
 
-    private void updateLaserGradient() {
-        if (frameRect != null) {
-            laserGradient = new LinearGradient(
-                frameRect.left, 0, frameRect.right, 0,
-                new int[]{0xFF2D55FF, 0xFF7D30D7},
-                null, Shader.TileMode.CLAMP
-            );
-            laserPaint.setShader(laserGradient);
-        }
+    public RectF getFrameRect() {
+        return frameRect;
     }
 
     @Override
@@ -66,14 +58,9 @@ public class OverlayView extends View {
         int sc = canvas.saveLayer(0, 0, getWidth(), getHeight(), null);
         canvas.drawRect(0, 0, getWidth(), getHeight(), backgroundPaint);
         if (frameRect != null) {
-            // Ventana transparente
             canvas.drawRoundRect(frameRect, cornerRadius, cornerRadius, clearPaint);
-            // Marco exterior
             canvas.drawRoundRect(frameRect, cornerRadius, cornerRadius, framePaint);
-            // Línea láser animada (si está en el rango)
-            if (laserPos >= frameRect.top && laserPos <= frameRect.bottom) {
-                canvas.drawLine(frameRect.left + 16, laserPos, frameRect.right - 16, laserPos, laserPaint);
-            }
+            canvas.drawLine(frameRect.left + 16, laserY, frameRect.right - 16, laserY, laserPaint);
         }
         canvas.restoreToCount(sc);
     }

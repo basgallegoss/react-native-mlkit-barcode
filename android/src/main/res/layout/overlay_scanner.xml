@@ -2,74 +2,76 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Vista de la cámara -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Overlay profesional: marco, laser, esquinas, etc -->
     <com.reactlibrary.OverlayView
         android:id="@+id/overlayView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center" />
 
-    <FrameLayout
-        android:id="@+id/scan_frame"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_gravity="center"
-        android:background="@drawable/scan_frame_bg"
-        android:elevation="12dp">
-
-        <View
-            android:id="@+id/laser"
-            android:layout_width="match_parent"
-            android:layout_height="5dp"
-            android:layout_gravity="top"
-            android:background="@drawable/laser_gradient" />
-    </FrameLayout>
-
+    <!-- Texto de feedback centrado arriba del marco -->
     <TextView
         android:id="@+id/feedbackText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="#FFFFFF"
         android:textSize="16sp"
+        android:textStyle="bold"
+        android:shadowColor="#88000000"
+        android:shadowDx="0"
+        android:shadowDy="2"
+        android:shadowRadius="4"
+        android:background="@drawable/feedback_bg"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="8dp"
         android:layout_gravity="center_horizontal|bottom"
         android:layout_marginBottom="120dp"
-        android:elevation="12dp"
-        android:text="Enfoca el código PDF417 dentro del marco" />
+        android:elevation="18dp"
+        android:text="Enfoca la boleta o cédula dentro del marco" />
 
+    <!-- Barra de progreso centrada bajo el feedback -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="@android:style/Widget.ProgressBar.Horizontal"
-        android:layout_width="240dp"
-        android:layout_height="10dp"
+        android:layout_width="260dp"
+        android:layout_height="12dp"
         android:layout_gravity="center_horizontal|bottom"
-        android:layout_marginBottom="100dp"
+        android:layout_marginBottom="92dp"
         android:progress="0"
         android:max="100"
         android:progressDrawable="@drawable/progress_bar" />
 
+    <!-- Botón Flash (abajo, centrado) -->
     <ImageButton
         android:id="@+id/flash_button"
         android:layout_width="54dp"
         android:layout_height="54dp"
         android:layout_gravity="center_horizontal|bottom"
-        android:layout_marginBottom="36dp"
+        android:layout_marginBottom="34dp"
         android:background="?android:attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_flash_on"
         android:tint="#FFFFFF"
-        android:contentDescription="Flash" />
+        android:contentDescription="Flash"
+        android:elevation="18dp" />
 
+    <!-- Botón cerrar (arriba a la izquierda) -->
     <ImageButton
         android:id="@+id/close_button"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_gravity="top|start"
-        android:layout_margin="18dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginStart="18dp"
         android:background="?android:attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_close"
         android:tint="#FFFFFF"
-        android:contentDescription="Cerrar" />
+        android:contentDescription="Cerrar"
+        android:elevation="18dp" />
+
 </FrameLayout>

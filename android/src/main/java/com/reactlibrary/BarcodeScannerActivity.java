@@ -139,27 +139,33 @@ public class BarcodeScannerActivity extends AppCompatActivity {
 
     private void startLaserAnimation() {
         laserHandler.post(new Runnable() {
+            float step = 8f;
+            float laserY = 0;
+            boolean down = true;
             @Override
             public void run() {
-                if (scanned) return;
-                int frameHeight = scanFrame.getHeight();
-                int laserHeight = laser.getHeight();
-                int minY = 0;
-                int maxY = frameHeight - laserHeight;
-                float currY = laser.getY();
-                float step = 6f;
-                if (laserDown) {
-                    currY += step;
-                    if (currY >= maxY) laserDown = false;
-                } else {
-                    currY -= step;
-                    if (currY <= minY) laserDown = true;
+                if (scanned || overlayView == null) return;
+                RectF frame = overlayView.frameRect;
+                if (frame == null) {
+                    laserHandler.postDelayed(this, 12);
+                    return;
                 }
-                laser.setY(currY);
-                laserHandler.postDelayed(this, 10);
+                float minY = frame.top + 12;
+                float maxY = frame.bottom - 12;
+                if (laserY == 0) laserY = minY;
+                if (down) {
+                    laserY += step;
+                    if (laserY >= maxY) down = false;
+                } else {
+                    laserY -= step;
+                    if (laserY <= minY) down = true;
+                }
+                overlayView.setLaserPos(laserY);
+                laserHandler.postDelayed(this, 12);
             }
         });
     }
+
 
     private void setLaserColor(int color) {
         laser.setBackgroundColor(color);

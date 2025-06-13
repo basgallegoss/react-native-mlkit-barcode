@@ -9,8 +9,8 @@
 
     <FrameLayout
         android:id="@+id/scan_frame"
-        android:layout_width="280dp"
-        android:layout_height="120dp"
+        android:layout_width="350dp"
+        android:layout_height="220dp"
         android:layout_gravity="center"
         android:background="@drawable/scan_frame_bg">
 

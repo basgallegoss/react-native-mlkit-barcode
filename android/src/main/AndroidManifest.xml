@@ -1,9 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="com.reactlibrary">
-
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-feature android:name="android.hardware.camera"
+    android:required="false" />
+
   <application>
-    <activity android:name=".BarcodeScannerActivity" />
+    <activity
+      android:name="com.reactlibrary.BarcodeScannerActivity"
+      android:exported="true"
+      android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+      android:configChanges="orientation|screenSize|keyboardHidden" />
   </application>
 </manifest>

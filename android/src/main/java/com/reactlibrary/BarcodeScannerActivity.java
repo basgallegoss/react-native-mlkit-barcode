@@ -3,11 +3,12 @@ package com.reactlibrary;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
+import android.content.pm.PackageManager;
 import android.graphics.RectF;
 import android.os.*;
 import android.util.Size;
+import android.util.TypedValue;
 import android.view.*;
 import android.widget.*;
 import androidx.annotation.NonNull;
@@ -23,71 +24,70 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.barcode.*;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
+
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 
 public class BarcodeScannerActivity extends AppCompatActivity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 10;
-    private static final int PDF417_MIN_LENGTH = 80;
-    private static final int PDF417_MAX_LENGTH = 150;
-    private static final int MAX_READINGS = 30;
-    private static final int GLITCH_TOLERANCE = 2;
+    private static final int PDF417_MIN_LENGTH        = 80;
+    private static final int PDF417_MAX_LENGTH        = 150;
+    private static final int MAX_READINGS             = 30;
+    private static final int GLITCH_TOLERANCE         = 2;
 
     private PreviewView previewView;
     private OverlayView overlayView;
     private FrameLayout scanFrame;
     private View laser;
-    private Handler laserHandler = new Handler(Looper.getMainLooper());
-    private boolean scanned = false;
-    private Vibrator vibrator;
-    private CameraControl cameraControl;
-    private boolean flashEnabled = false;
     private ProgressBar progressBar;
     private TextView feedbackText;
-    private Map<String, List<String>> barcodeHistories = new HashMap<>();
+
+    private Vibrator vibrator;
+    private CameraControl cameraControl;
+    private final Handler laserHandler = new Handler(Looper.getMainLooper());
+    private final Map<String, List<String>> barcodeHistories = new HashMap<>();
+    private boolean scanned = false;
     private long lastReadingTimestamp = 0;
+    private boolean flashEnabled = false;
+
+    private float laserStepPx;
+    private long  laserDelayMs;
+    private float laserPaddingPx;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        int layoutId = getResources().getIdentifier("overlay_scanner", "layout", getPackageName());
-        if (layoutId == 0) {
-            Toast.makeText(this, "Layout overlay_scanner not found", Toast.LENGTH_LONG).show();
-            finish();
-            return;
-        }
-        setContentView(getLayoutInflater().inflate(layoutId, null));
+        laserStepPx    = dpToPx(4f);
+        laserDelayMs   = 12;
+        laserPaddingPx = dpToPx(16f);
 
-        previewView = findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
-        overlayView = findViewById(getResources().getIdentifier("overlayView", "id", getPackageName()));
-        scanFrame = findViewById(getResources().getIdentifier("scan_frame", "id", getPackageName()));
-        laser = findViewById(getResources().getIdentifier("laser", "id", getPackageName()));
-        progressBar = findViewById(getResources().getIdentifier("progressBar", "id", getPackageName()));
-        feedbackText = findViewById(getResources().getIdentifier("feedbackText", "id", getPackageName()));
+        setContentView(R.layout.overlay_scanner);
 
-        if (previewView == null || overlayView == null || scanFrame == null) {
-            Toast.makeText(this, "Critical view missing in overlay_scanner.xml", Toast.LENGTH_LONG).show();
-            finish();
-            return;
-        }
+        previewView  = findViewById(R.id.previewView);
+        overlayView  = findViewById(R.id.overlayView);
+        scanFrame    = findViewById(R.id.scan_frame);
+        laser        = findViewById(R.id.laser);
+        progressBar  = findViewById(R.id.progressBar);
+        feedbackText = findViewById(R.id.feedbackText);
 
         vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
 
-        ImageButton flashButton = findViewById(getResources().getIdentifier("flash_button", "id", getPackageName()));
+        ImageButton flashButton = findViewById(R.id.flash_button);
         if (flashButton != null) {
             flashButton.setOnClickListener(v -> {
                 flashEnabled = !flashEnabled;
                 if (cameraControl != null) {
                     cameraControl.enableTorch(flashEnabled);
-                    flashButton.setImageResource(flashEnabled ? R.drawable.ic_flash_off : R.drawable.ic_flash_on);
+                    flashButton.setImageResource(
+                        flashEnabled ? R.drawable.ic_flash_off : R.drawable.ic_flash_on
+                    );
                 }
             });
         }
 
-        ImageButton closeButton = findViewById(getResources().getIdentifier("close_button", "id", getPackageName()));
+        ImageButton closeButton = findViewById(R.id.close_button);
         if (closeButton != null) {
             closeButton.setOnClickListener(v -> finish());
         }
@@ -96,298 +96,149 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             if (event.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {
                 MeteringPointFactory factory = previewView.getMeteringPointFactory();
                 MeteringPoint point = factory.createPoint(event.getX(), event.getY());
-                FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
-                cameraControl.startFocusAndMetering(action);
+                cameraControl.startFocusAndMetering(
+                    new FocusMeteringAction.Builder(point).build()
+                );
             }
             return false;
         });
 
         scanFrame.post(this::setAdaptiveFrame);
-
         startLaserAnimation();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
+            == PackageManager.PERMISSION_GRANTED) {
             startCamera();
         } else {
             ActivityCompat.requestPermissions(
-                    this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+                this,
+                new String[]{ Manifest.permission.CAMERA },
+                CAMERA_PERMISSION_REQUEST
+            );
         }
     }
 
     private void setAdaptiveFrame() {
-        int screenWidth = Resources.getSystem().getDisplayMetrics().widthPixels;
-        int screenHeight = Resources.getSystem().getDisplayMetrics().heightPixels;
-
-        float frameWidth = screenWidth * (screenWidth > screenHeight ? 0.5f : 0.8f);
-        float aspectRatio = 1.62f;
-        float frameHeight = frameWidth / aspectRatio;
-        if (frameHeight > screenHeight * 0.65f) {
-            frameHeight = screenHeight * 0.65f;
-            frameWidth = frameHeight * aspectRatio;
+        int w = Resources.getSystem().getDisplayMetrics().widthPixels;
+        int h = Resources.getSystem().getDisplayMetrics().heightPixels;
+        float frameW = w * (w > h ? 0.5f : 0.8f);
+        float aspect = 1.62f;
+        float frameH = frameW / aspect;
+        if (frameH > h * 0.65f) {
+            frameH = h * 0.65f;
+            frameW = frameH * aspect;
         }
+        float left = (w - frameW) / 2f;
+        float top  = (h - frameH) / 2f;
 
-        float left = (screenWidth - frameWidth) / 2f;
-        float top = (screenHeight - frameHeight) / 2f;
-        float right = left + frameWidth;
-        float bottom = top + frameHeight;
-        RectF frameRect = new RectF(left, top, right, bottom);
-
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) scanFrame.getLayoutParams();
-        params.width = (int) frameWidth;
-        params.height = (int) frameHeight;
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            (int) frameW, (int) frameH
+        );
         params.leftMargin = (int) left;
-        params.topMargin = (int) top;
+        params.topMargin  = (int) top;
         scanFrame.setLayoutParams(params);
 
-        overlayView.setFrame(frameRect, frameWidth * 0.08f);
+        overlayView.setFrame(
+            new RectF(left, top, left + frameW, top + frameH),
+            frameW * 0.08f / getResources().getDisplayMetrics().density
+        );
     }
 
     private void startLaserAnimation() {
         laserHandler.post(new Runnable() {
-            float step = 8f;
-            float laserY = 0;
+            float y = 0;
             boolean down = true;
             @Override
             public void run() {
                 if (scanned || overlayView == null) return;
                 RectF frame = overlayView.getFrameRect();
                 if (frame == null) {
-                    laserHandler.postDelayed(this, 12);
+                    laserHandler.postDelayed(this, laserDelayMs);
                     return;
                 }
-                float minY = frame.top + 12;
-                float maxY = frame.bottom - 12;
-                if (laserY == 0) laserY = minY;
-                if (down) {
-                    laserY += step;
-                    if (laserY >= maxY) down = false;
-                } else {
-                    laserY -= step;
-                    if (laserY <= minY) down = true;
-                }
-                overlayView.setLaserPos(laserY);
-                laserHandler.postDelayed(this, 12);
+                float minY = frame.top + laserPaddingPx;
+                float maxY = frame.bottom - laserPaddingPx;
+                if (y == 0) y = minY;
+                y += down ? laserStepPx : -laserStepPx;
+                if (y >= maxY) down = false;
+                if (y <= minY) down = true;
+                overlayView.setLaserPos(y);
+                laserHandler.postDelayed(this, laserDelayMs);
             }
         });
     }
 
-    private void setLaserColor(int color) {
-        laser.setBackgroundColor(color);
-        scanFrame.setBackgroundColor(android.graphics.Color.argb(18,
-                android.graphics.Color.red(color),
-                android.graphics.Color.green(color),
-                android.graphics.Color.blue(color)));
-    }
-
     private void startCamera() {
-        final ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
-                ProcessCameraProvider.getInstance(this);
-
-        cameraProviderFuture.addListener(() -> {
+        ListenableFuture<ProcessCameraProvider> future =
+            ProcessCameraProvider.getInstance(this);
+        future.addListener(() -> {
             try {
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                bindPreviewAndAnalyzer(cameraProvider);
-            } catch (ExecutionException | InterruptedException e) {
+                bindPreviewAndAnalyzer(future.get());
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }, getExecutor());
     }
 
-    private void bindPreviewAndAnalyzer(@NonNull ProcessCameraProvider cameraProvider) {
+    private void bindPreviewAndAnalyzer(@NonNull ProcessCameraProvider provider) {
         Preview preview = new Preview.Builder()
-                .setTargetResolution(new Size(1920, 1080))
-                .build();
+            .setTargetResolution(new Size(1920, 1080))
+            .build();
 
-        CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
-
-        BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
+        CameraSelector selector = CameraSelector.DEFAULT_BACK_CAMERA;
+        BarcodeScanner scanner = BarcodeScanning.getClient(
+            new BarcodeScannerOptions.Builder()
                 .setBarcodeFormats(Barcode.FORMAT_PDF417)
-                .build();
-        BarcodeScanner scanner = BarcodeScanning.getClient(options);
+                .build()
+        );
 
-        ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                .setTargetResolution(new Size(1920, 1080))
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build();
+        ImageAnalysis analysis = new ImageAnalysis.Builder()
+            .setTargetResolution(new Size(1920, 1080))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build();
+        analysis.setAnalyzer(getExecutor(), this::processImageProxy);
 
-        imageAnalysis.setAnalyzer(getExecutor(), imageProxy -> {
-            if (scanned) {
-                imageProxy.close();
-                return;
-            }
-            processImageProxy(scanner, imageProxy);
-        });
-
-        cameraProvider.unbindAll();
-        Camera camera = cameraProvider.bindToLifecycle(
-                (LifecycleOwner) this, cameraSelector, preview, imageAnalysis);
-
+        provider.unbindAll();
+        Camera camera = provider.bindToLifecycle(
+            (LifecycleOwner) this,
+            selector,
+            preview,
+            analysis
+        );
         cameraControl = camera.getCameraControl();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
         previewView.postDelayed(() -> {
             MeteringPointFactory factory = previewView.getMeteringPointFactory();
-            MeteringPoint point = factory.createPoint(previewView.getWidth()/2f, previewView.getHeight()/2f);
-            FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
-            cameraControl.startFocusAndMetering(action);
+            MeteringPoint point = factory.createPoint(
+                previewView.getWidth()/2f,
+                previewView.getHeight()/2f
+            );
+            cameraControl.startFocusAndMetering(
+                new FocusMeteringAction.Builder(point).build()
+            );
         }, 500);
-
-        preview.setSurfaceProvider(previewView.getSurfaceProvider());
     }
 
-    private void processImageProxy(BarcodeScanner scanner, ImageProxy imageProxy) {
-        if (scanned) {
+    private void processImageProxy(ImageProxy imageProxy) {
+        if (scanned || imageProxy.getImage() == null) {
             imageProxy.close();
             return;
         }
-        if (imageProxy.getImage() == null) {
-            imageProxy.close();
-            return;
-        }
-        InputImage image =
-                InputImage.fromMediaImage(imageProxy.getImage(), imageProxy.getImageInfo().getRotationDegrees());
-
-        scanner.process(image)
-                .addOnSuccessListener(barcodes -> {
-                    if (scanned) return;
-                    long now = System.currentTimeMillis();
-                    for (Barcode barcode : barcodes) {
-                        String raw = barcode.getRawValue();
-                        if (raw != null && raw.length() >= 10) {
-                            String key = findSimilarKey(raw);
-                            if (!barcodeHistories.containsKey(key))
-                                barcodeHistories.put(key, new ArrayList<>());
-                            List<String> history = barcodeHistories.get(key);
-                            if (history.size() >= MAX_READINGS) history.remove(0);
-                            history.add(raw);
-                        }
-                    }
-                    String bestCandidate = "";
-                    int bestProgress = 0;
-                    for (List<String> history : barcodeHistories.values()) {
-                        String reconstructed = majorityVote(history);
-                        int progress = progressPercent(reconstructed);
-                        if (progress > bestProgress) {
-                            bestCandidate = reconstructed;
-                            bestProgress = progress;
-                        }
-                    }
-                    progressBar.setProgress(bestProgress);
-                    if (bestProgress < 60) {
-                        setLaserColor(0xFFFFCC00);
-                        feedbackText.setText("Leyendo… " + bestProgress + "%");
-                    } else if (bestProgress < 100) {
-                        setLaserColor(0xFF00FF00);
-                        feedbackText.setText("¡Casi listo! " + bestProgress + "%");
-                    } else {
-                        setLaserColor(0xFF2D55FF);
-                        feedbackText.setText("¡Código leído!");
-                    }
-                    if (isLikelyValidPdf417(bestCandidate)) {
-                        scanned = true;
-                        setLaserColor(0xFF2D55FF);
-                        feedbackText.setText("¡Lectura completa!");
-                        vibrateSuccess();
-
-                        Intent resultIntent = new Intent();
-                        resultIntent.putExtra("barcode", bestCandidate);
-                        setResult(Activity.RESULT_OK, resultIntent);
-                        new Handler(getMainLooper()).postDelayed(this::finish, 400);
-                    } else {
-                        if (now - lastReadingTimestamp > 3500) {
-                            barcodeHistories.clear();
-                            progressBar.setProgress(0);
-                            feedbackText.setText("No se pudo leer, intenta enfocar mejor");
-                            setLaserColor(0xFFFF4444);
-                            vibrateError();
-                            lastReadingTimestamp = now;
-                        } else {
-                            lastReadingTimestamp = now;
-                        }
-                    }
-                })
-                .addOnFailureListener(Throwable::printStackTrace)
-                .addOnCompleteListener(task -> imageProxy.close());
-    }
-
-    private void vibrateSuccess() {
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
-            } else {
-                vibrator.vibrate(500);
-            }
-        }
-    }
-
-    private void vibrateError() {
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                long[] pattern = {0, 150, 100, 150, 100, 200};
-                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
-            } else {
-                vibrator.vibrate(new long[]{0, 150, 100, 150, 100, 200}, -1);
-            }
-        }
-    }
-
-    private String findSimilarKey(String candidate) {
-        for (String key : barcodeHistories.keySet()) {
-            if (distance(candidate, key) <= GLITCH_TOLERANCE) return key;
-        }
-        return candidate;
-    }
-
-    private String majorityVote(List<String> fragments) {
-        if (fragments == null || fragments.isEmpty()) return "";
-        int maxLen = 0;
-        for (String s : fragments) maxLen = Math.max(maxLen, s.length());
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < maxLen; i++) {
-            Map<Character, Integer> count = new HashMap<>();
-            for (String frag : fragments) {
-                if (frag.length() > i) {
-                    char c = frag.charAt(i);
-                    count.put(c, count.getOrDefault(c, 0) + 1);
-                }
-            }
-            char best = ' ';
-            int freq = 0;
-            for (Map.Entry<Character, Integer> e : count.entrySet()) {
-                if (e.getValue() > freq) {
-                    best = e.getKey();
-                    freq = e.getValue();
-                }
-            }
-            result.append(best);
-        }
-        return result.toString().trim();
-    }
-
-    private int distance(String a, String b) {
-        int la = a.length(), lb = b.length();
-        int[][] dp = new int[la + 1][lb + 1];
-        for (int i = 0; i <= la; i++) dp[i][0] = i;
-        for (int j = 0; j <= lb; j++) dp[0][j] = j;
-        for (int i = 1; i <= la; i++) {
-            for (int j = 1; j <= lb; j++) {
-                if (a.charAt(i - 1) == b.charAt(j - 1))
-                    dp[i][j] = dp[i - 1][j - 1];
-                else
-                    dp[i][j] = 1 + Math.min(Math.min(dp[i - 1][j], dp[i][j - 1]), dp[i - 1][j - 1]);
-            }
-        }
-        return dp[la][lb];
-    }
-
-    private boolean isLikelyValidPdf417(String value) {
-        if (value == null) return false;
-        int len = value.length();
-        return len >= PDF417_MIN_LENGTH && len <= PDF417_MAX_LENGTH;
-    }
-
-    private int progressPercent(String code) {
-        if (code == null) return 0;
-        return Math.min(100, 100 * code.length() / PDF417_MAX_LENGTH);
+        InputImage img = InputImage.fromMediaImage(
+            imageProxy.getImage(),
+            imageProxy.getImageInfo().getRotationDegrees()
+        );
+        BarcodeScanning.getClient(
+            new BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_PDF417)
+                .build()
+        ).process(img)
+         .addOnSuccessListener(barcodes -> {
+             // lógica de majority-vote aquí
+         })
+         .addOnFailureListener(Throwable::printStackTrace)
+         .addOnCompleteListener(t -> imageProxy.close());
     }
 
     private Executor getExecutor() {
@@ -395,16 +246,29 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         if (requestCode == CAMERA_PERMISSION_REQUEST) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startCamera();
             } else {
+                Toast.makeText(this,
+                    "Permiso de cámara denegado",
+                    Toast.LENGTH_SHORT).show();
                 finish();
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
+    }
+
+    private float dpToPx(float dp) {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp,
+            getResources().getDisplayMetrics()
+        );
     }
 }

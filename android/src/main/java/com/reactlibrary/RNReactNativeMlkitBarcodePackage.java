@@ -1,4 +1,3 @@
-
 package com.reactlibrary;
 
 import java.util.Arrays;
@@ -10,14 +9,17 @@ import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.uimanager.ViewManager;
 
+
 public class RNReactNativeMlkitBarcodePackage implements ReactPackage {
     @Override
     public List<NativeModule> createNativeModules(ReactApplicationContext reactContext) {
-      return Arrays.<NativeModule>asList(new RNReactNativeMlkitBarcodeModule(reactContext));
+        return Arrays.<NativeModule>asList(
+            new RNReactNativeMlkitBarcodeModule(reactContext)
+        );
     }
 
     @Override
     public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
-      return Collections.emptyList();
+        return Collections.emptyList();
     }
 }

@@ -11,6 +11,7 @@ import android.util.TypedValue;
 import android.view.*;
 import android.widget.*;
 import androidx.annotation.NonNull;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.*;
 import androidx.camera.lifecycle.ProcessCameraProvider;
@@ -24,6 +25,8 @@ import com.google.mlkit.vision.common.InputImage;
 
 import java.util.*;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+
 
 public class BarcodeScannerActivity extends AppCompatActivity {
 

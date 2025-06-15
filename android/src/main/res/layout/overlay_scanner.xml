@@ -1,6 +1,9 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="300dp"
+    android:layout_gravity="center"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
 
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
@@ -33,7 +36,7 @@
         android:textColor="#FFF"
         android:textSize="16sp"
         android:layout_gravity="center_horizontal|bottom"
-        android:layout_marginBottom="120dp"/>
+        android:layout_marginBottom="120dp" />
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -42,7 +45,7 @@
         android:layout_height="8dp"
         android:layout_gravity="center_horizontal|bottom"
         android:layout_marginBottom="100dp"
-        android:max="100"/>
+        android:max="100" />
 
     <ImageButton
         android:id="@+id/flash_button"
@@ -52,7 +55,7 @@
         android:layout_marginBottom="36dp"
         android:src="@drawable/ic_flash_on"
         android:tint="#FFF"
-        android:background="?android:attr/selectableItemBackgroundBorderless"/>
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
 
     <ImageButton
         android:id="@+id/close_button"
@@ -62,5 +65,5 @@
         android:layout_margin="16dp"
         android:src="@drawable/ic_close"
         android:tint="#FFF"
-        android:background="?android:attr/selectableItemBackgroundBorderless"/>
+        android:background="?android:attr/selectableItemBackgroundBorderless" />
 </FrameLayout>

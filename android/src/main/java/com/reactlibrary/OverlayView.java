@@ -50,12 +50,10 @@ public class OverlayView extends View {
     protected void onDraw(Canvas canvas) {
         if (frameRect == null) return;
         int sc = canvas.saveLayer(0, 0, getWidth(), getHeight(), null);
-
-        // Sombrear todo
         canvas.drawRect(0, 0, getWidth(), getHeight(), backgroundPaint);
-        // Borra la ventana
+
         canvas.drawRoundRect(frameRect, cornerRadiusPx, cornerRadiusPx, clearPaint);
-        // Dibuja marco
+
         canvas.drawRoundRect(frameRect, cornerRadiusPx, cornerRadiusPx, framePaint);
 
         canvas.restoreToCount(sc);

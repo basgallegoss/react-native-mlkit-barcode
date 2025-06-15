@@ -121,27 +121,19 @@ public class BarcodeScannerActivity extends AppCompatActivity {
     private void setAdaptiveFrame() {
         int w = Resources.getSystem().getDisplayMetrics().widthPixels;
         int h = Resources.getSystem().getDisplayMetrics().heightPixels;
-        float frameW = w * (w > h ? 0.5f : 0.8f);
-        float aspect = 1.62f;
-        float frameH = frameW / aspect;
-        if (frameH > h * 0.65f) {
-            frameH = h * 0.65f;
-            frameW = frameH * aspect;
-        }
+        float frameW = w * 0.8f;
+        float frameH = frameW * 0.4f;
         float left = (w - frameW) / 2f;
         float top  = (h - frameH) / 2f;
 
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(
             (int) frameW, (int) frameH
         );
-        params.leftMargin = (int) left;
-        params.topMargin  = (int) top;
-        scanFrame.setLayoutParams(params);
+        p.leftMargin = (int) left;
+        p.topMargin  = (int) top;
+        scanFrame.setLayoutParams(p);
 
-        overlayView.setFrame(
-            new RectF(left, top, left + frameW, top + frameH),
-            frameW * 0.08f / getResources().getDisplayMetrics().density
-        );
+        overlayView.setFrame(new RectF(left, top, left + frameW, top + frameH));
     }
 
     private void startLaserAnimation() {

@@ -10,22 +10,18 @@
     <com.reactlibrary.OverlayView
         android:id="@+id/overlayView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center" />
+        android:layout_height="match_parent" />
 
+    <!-- Contenedor transparente para la línea láser -->
     <FrameLayout
         android:id="@+id/scan_frame"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_gravity="center"
-        android:background="@drawable/scan_frame_bg"
-        android:elevation="12dp">
-
+        android:layout_gravity="center">
         <View
             android:id="@+id/laser"
             android:layout_width="match_parent"
-            android:layout_height="5dp"
-            android:layout_gravity="top"
+            android:layout_height="4dp"
             android:background="@drawable/laser_gradient" />
     </FrameLayout>
 
@@ -33,43 +29,38 @@
         android:id="@+id/feedbackText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="#FFFFFF"
+        android:text="Enfoca el PDF417 dentro del marco"
+        android:textColor="#FFF"
         android:textSize="16sp"
         android:layout_gravity="center_horizontal|bottom"
-        android:layout_marginBottom="120dp"
-        android:elevation="12dp"
-        android:text="Enfoca el código PDF417 dentro del marco" />
+        android:layout_marginBottom="120dp"/>
 
     <ProgressBar
         android:id="@+id/progressBar"
         style="@android:style/Widget.ProgressBar.Horizontal"
-        android:layout_width="240dp"
-        android:layout_height="10dp"
+        android:layout_width="200dp"
+        android:layout_height="8dp"
         android:layout_gravity="center_horizontal|bottom"
         android:layout_marginBottom="100dp"
-        android:progress="0"
-        android:max="100"
-        android:progressDrawable="@drawable/progress_bar" />
+        android:max="100"/>
 
     <ImageButton
         android:id="@+id/flash_button"
-        android:layout_width="54dp"
-        android:layout_height="54dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="center_horizontal|bottom"
         android:layout_marginBottom="36dp"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_flash_on"
-        android:tint="#FFFFFF"
-        android:contentDescription="Flash" />
+        android:tint="#FFF"
+        android:background="?android:attr/selectableItemBackgroundBorderless"/>
 
     <ImageButton
         android:id="@+id/close_button"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:layout_gravity="top|start"
-        android:layout_margin="18dp"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:layout_margin="16dp"
         android:src="@drawable/ic_close"
-        android:tint="#FFFFFF"
-        android:contentDescription="Cerrar" />
+        android:tint="#FFF"
+        android:background="?android:attr/selectableItemBackgroundBorderless"/>
 </FrameLayout>

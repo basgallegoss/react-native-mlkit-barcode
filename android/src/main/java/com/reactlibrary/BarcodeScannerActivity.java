@@ -2,7 +2,7 @@ package com.reactlibrary;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.res.Resources;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.RectF;
 import android.os.*;
@@ -10,14 +10,15 @@ import android.util.Size;
 import android.util.TypedValue;
 import android.view.*;
 import android.widget.*;
-import androidx.annotation.NonNull;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.*;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.barcode.*;
 import com.google.mlkit.vision.barcode.common.Barcode;
@@ -27,24 +28,22 @@ import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-
 public class BarcodeScannerActivity extends AppCompatActivity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 10;
-    private static final int PDF417_MIN_LENGTH        = 80;
-    private static final int PDF417_MAX_LENGTH        = 150;
-    private static final int MAX_READINGS             = 30;
-    private static final int GLITCH_TOLERANCE         = 2;
+    /** Número de lecturas antes de decidir el código definitivo */
+    private static final int MAX_READINGS     = 15;
+    /** Cuántos frames pueden “fallar” sin alterar el majority vote */
+    private static final int GLITCH_TOLERANCE = 2;
 
     private PreviewView previewView;
     private OverlayView overlayView;
     private FrameLayout scanFrame;
-    private View laser;
     private ProgressBar progressBar;
     private TextView feedbackText;
-
     private Vibrator vibrator;
     private CameraControl cameraControl;
+
     private final Handler laserHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Deque<String>> barcodeHistories = new HashMap<>();
     private boolean scanned = false;
@@ -66,11 +65,12 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         previewView  = findViewById(R.id.previewView);
         overlayView  = findViewById(R.id.overlayView);
         scanFrame    = findViewById(R.id.scan_frame);
-        laser        = findViewById(R.id.laser);
         progressBar  = findViewById(R.id.progressBar);
         feedbackText = findViewById(R.id.feedbackText);
+        vibrator     = (Vibrator) getSystemService(VIBRATOR_SERVICE);
 
-        vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        progressBar.setMax(MAX_READINGS);
+        progressBar.setProgress(0);
 
         setupFlashButton();
         setupCloseButton();
@@ -95,25 +95,25 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         ImageButton flashButton = findViewById(R.id.flash_button);
         flashButton.setOnClickListener(v -> {
             if (cameraControl == null) return;
-            boolean enabled = !Boolean.TRUE.equals(flashButton.getTag());
-            cameraControl.enableTorch(enabled);
-            flashButton.setTag(enabled);
+            boolean enable = !Boolean.TRUE.equals(flashButton.getTag());
+            cameraControl.enableTorch(enable);
+            flashButton.setTag(enable);
             flashButton.setImageResource(
-                enabled ? R.drawable.ic_flash_off : R.drawable.ic_flash_on
+                enable ? R.drawable.ic_flash_off : R.drawable.ic_flash_on
             );
         });
     }
 
     private void setupCloseButton() {
-        ImageButton closeButton = findViewById(R.id.close_button);
-        closeButton.setOnClickListener(v -> finish());
+        findViewById(R.id.close_button)
+            .setOnClickListener(v -> finish());
     }
 
     private void setupFocusOnTap() {
-        previewView.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {
+        previewView.setOnTouchListener((v, ev) -> {
+            if (ev.getAction() == MotionEvent.ACTION_DOWN && cameraControl != null) {
                 MeteringPoint point = previewView.getMeteringPointFactory()
-                    .createPoint(event.getX(), event.getY());
+                    .createPoint(ev.getX(), ev.getY());
                 cameraControl.startFocusAndMetering(
                     new FocusMeteringAction.Builder(point)
                         .setAutoCancelDuration(3, TimeUnit.SECONDS)
@@ -129,8 +129,8 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         int h = Resources.getSystem().getDisplayMetrics().heightPixels;
         float frameW = w * 0.8f;
         float frameH = frameW * 0.4f;
-        float left = (w - frameW) / 2f;
-        float top  = (h - frameH) / 2f;
+        float left   = (w - frameW) / 2f;
+        float top    = (h - frameH) / 2f;
 
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(
             (int) frameW, (int) frameH
@@ -183,7 +183,6 @@ public class BarcodeScannerActivity extends AppCompatActivity {
             .setTargetResolution(new Size(1920, 1080))
             .build();
 
-        CameraSelector selector = CameraSelector.DEFAULT_BACK_CAMERA;
         ImageAnalysis analysis = new ImageAnalysis.Builder()
             .setTargetResolution(new Size(1920, 1080))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -193,7 +192,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         provider.unbindAll();
         Camera camera = provider.bindToLifecycle(
             this,
-            selector,
+            CameraSelector.DEFAULT_BACK_CAMERA,
             preview,
             analysis
         );
@@ -203,10 +202,7 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         // Enfoque inicial al centro
         previewView.postDelayed(() -> {
             MeteringPoint center = previewView.getMeteringPointFactory()
-                .createPoint(
-                    previewView.getWidth() / 2f,
-                    previewView.getHeight() / 2f
-                );
+                .createPoint(previewView.getWidth()/2f, previewView.getHeight()/2f);
             cameraControl.startFocusAndMetering(
                 new FocusMeteringAction.Builder(center)
                     .setAutoCancelDuration(3, TimeUnit.SECONDS)
@@ -232,14 +228,15 @@ public class BarcodeScannerActivity extends AppCompatActivity {
          .addOnSuccessListener(barcodes -> {
              for (Barcode barcode : barcodes) {
                  String raw = barcode.getRawValue();
-                 if (raw == null || raw.length() < PDF417_MIN_LENGTH || raw.length() > PDF417_MAX_LENGTH) continue;
+                 if (raw == null) continue;  // aceptamos cualquier longitud
                  Deque<String> history = barcodeHistories
                      .computeIfAbsent("pdf417", k -> new ArrayDeque<>());
                  history.addLast(raw);
-                 if (history.size() > MAX_READINGS) history.removeFirst();
-                 // majority vote
+                 if (history.size() > MAX_READINGS) {
+                     history.removeFirst();
+                 }
                  String candidate = buildMajorityString(history);
-                 progressBar.setProgress(history.size() * 100 / MAX_READINGS);
+                 progressBar.setProgress(history.size());
                  feedbackText.setText("Leyendo: " + candidate);
                  if (history.size() >= MAX_READINGS) {
                      onBarcodeScanned(candidate);
@@ -257,11 +254,13 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         for (int i = 0; i < len; i++) {
             Map<Character, Integer> count = new HashMap<>();
             for (String s : history) {
-                char c = s.charAt(i);
-                count.put(c, count.getOrDefault(c, 0) + 1);
+                if (i < s.length()) {
+                    char c = s.charAt(i);
+                    count.put(c, count.getOrDefault(c, 0) + 1);
+                }
             }
             char best = history.peekLast().charAt(i);
-            for (Map.Entry<Character, Integer> e : count.entrySet()) {
+            for (Map.Entry<Character,Integer> e : count.entrySet()) {
                 if (e.getValue() > history.size() - GLITCH_TOLERANCE) {
                     best = e.getKey();
                     break;
@@ -282,8 +281,13 @@ public class BarcodeScannerActivity extends AppCompatActivity {
         } else {
             vibrator.vibrate(300);
         }
-        Toast.makeText(this, "Código escaneado: " + code, Toast.LENGTH_LONG).show();
-        // TODO: maneja el resultado (devolver a Activity padre, etc.)
+        Toast.makeText(this, "Código escaneado", Toast.LENGTH_SHORT).show();
+
+        // Devuelvo el resultado a la actividad padre
+        Intent data = new Intent();
+        data.putExtra("scanned_code", code);
+        setResult(Activity.RESULT_OK, data);
+        finish();
     }
 
     private Executor getExecutor() {
